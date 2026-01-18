@@ -29,6 +29,21 @@ bun start
 bun build index.ts --outdir dist --target node
 ```
 
+### CLI Scripts
+```bash
+# Full indexing (all notes) - uses parallel JXA workers
+bun run-index.ts
+
+# Incremental sync (only changed notes)
+bun run-sync.ts
+
+# Find large notes slowing down indexing
+bun list-large-notes.ts [limit] [min-size-bytes]
+# Examples:
+bun list-large-notes.ts           # Top 20 notes > 100KB
+bun list-large-notes.ts 10 1000000 # Top 10 notes > 1MB
+```
+
 ### Testing
 ```bash
 # Run tests (requires PostgreSQL)
@@ -60,11 +75,14 @@ tail -n 50 -f ~/Library/Logs/Claude/mcp.log
 
 ```
 ├── index.ts              # MCP server entry point
+├── run-index.ts          # CLI: Full indexing with parallel JXA
+├── run-sync.ts           # CLI: Incremental sync
+├── list-large-notes.ts   # CLI: Find large notes
 ├── src/
 │   ├── db.ts            # PostgreSQL connection pool and queries
 │   ├── schema.sql       # Database schema with pgvector
 │   ├── embeddings.ts    # On-device embedding generation
-│   ├── apple-notes.ts   # JXA Apple Notes integration
+│   ├── apple-notes.ts   # JXA Apple Notes integration (parallel fetch)
 │   ├── indexer.ts       # Batch indexing with job tracking
 │   └── search.ts        # Hybrid search implementation
 ├── index.test.ts        # Test suite
@@ -147,9 +165,20 @@ CREATE TABLE indexing_jobs (
 ### Apple Notes Integration (`src/apple-notes.ts`)
 
 - Uses JXA to interact with Notes.app
+- **Parallel fetching**: 4 concurrent workers fetch notes simultaneously
+- **Bulk batch processing**: Fetches notes by index range, not one-by-one
+- **Trash exclusion**: Automatically skips "Recently Deleted" folder
 - String escaping critical for JXA execution
 - Content stored/retrieved as HTML
 - Note retrieval by title or Apple ID
+
+### Performance Characteristics
+
+- **Full indexing ~1000 notes**: ~14 minutes
+  - JXA fetch: ~11 minutes (parallel)
+  - Embedding: ~3 minutes
+- **Incremental sync (no changes)**: ~5 seconds
+- **Large notes with images**: Can significantly slow embedding (use `list-large-notes.ts` to identify)
 
 ## Environment Configuration
 

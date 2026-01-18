@@ -94,6 +94,26 @@ Important: Replace `<YOUR_USER_NAME>` with your actual username.
 
 4. Start by indexing your notes. Ask Claude to index your notes by saying something like: "Index my notes" or "Index my Apple Notes".
 
+## CLI Scripts
+
+Run these directly from the command line:
+
+```bash
+# Full indexing (all notes)
+bun run-index.ts
+
+# Incremental sync (only changed notes)
+bun run-sync.ts
+
+# Find large notes that slow down indexing
+bun list-large-notes.ts [limit] [min-size-bytes]
+
+# Examples:
+bun list-large-notes.ts           # Top 20 notes > 100KB
+bun list-large-notes.ts 50 500000 # Top 50 notes > 500KB
+bun list-large-notes.ts 10 1000000 # Top 10 notes > 1MB
+```
+
 ## MCP Tools
 
 | Tool | Description |
@@ -139,14 +159,31 @@ bun run setup-db
 
 ```
 ├── index.ts              # MCP server entry point
+├── run-index.ts          # CLI: Full indexing
+├── run-sync.ts           # CLI: Incremental sync
+├── list-large-notes.ts   # CLI: Find large notes
 ├── src/
 │   ├── db.ts            # PostgreSQL connection pool
 │   ├── schema.sql       # Database schema
 │   ├── embeddings.ts    # On-device embeddings
-│   ├── apple-notes.ts   # JXA integration
+│   ├── apple-notes.ts   # JXA integration (parallel fetch)
 │   ├── indexer.ts       # Batch indexing
 │   └── search.ts        # Hybrid search
 ```
+
+## Performance
+
+- **Parallel JXA fetching**: Uses 4 concurrent workers to fetch notes from Apple Notes
+- **Bulk batch processing**: Fetches notes in ranges instead of one-by-one
+- **Incremental sync**: Only re-indexes notes with newer modification dates
+- **Trash exclusion**: Automatically skips notes in "Recently Deleted"
+- **Embedding model caching**: Model loaded once and reused
+
+Typical performance for ~1000 notes:
+- Full index: ~14 minutes
+- Incremental sync (no changes): ~5 seconds
+
+**Note**: Notes with embedded images (base64) significantly slow down indexing. Use `list-large-notes.ts` to identify them.
 
 ## Development
 
