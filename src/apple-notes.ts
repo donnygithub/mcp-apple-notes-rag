@@ -143,13 +143,13 @@ export async function getNoteDetailsById(noteId: string): Promise<AppleNoteDetai
 
 /**
  * Get all notes with full details (for initial indexing)
- * Uses bulk JXA fetch for performance - fetches all notes in batches
+ * Uses parallel bulk JXA fetch for maximum performance
  * Excludes notes in trash (Recently Deleted)
  */
 export async function getAllNotesWithDetails(
   onProgress?: (processed: number, total: number) => void
 ): Promise<AppleNoteDetails[]> {
-  console.error("  → Fetching notes in bulk batches...");
+  console.error("  → Fetching notes with parallel JXA workers...");
   const startTime = performance.now();
 
   // First get count
@@ -160,15 +160,27 @@ export async function getAllNotesWithDetails(
   const totalNotes = countResult as number;
   console.error(`  ℹ️  Total notes in Apple Notes: ${totalNotes}`);
 
-  // Fetch in batches of 100 notes at a time
-  const batchSize = 100;
-  const allDetails: AppleNoteDetails[] = [];
+  // Calculate parallel batches (4 workers)
+  const numWorkers = 4;
+  const batchSize = Math.ceil(totalNotes / numWorkers);
 
-  for (let start = 0; start < totalNotes; start += batchSize) {
+  const batches: { start: number; end: number }[] = [];
+  for (let i = 0; i < numWorkers; i++) {
+    const start = i * batchSize;
     const end = Math.min(start + batchSize, totalNotes);
-    const batchStart = performance.now();
+    if (start < totalNotes) {
+      batches.push({ start, end });
+    }
+  }
 
-    console.error(`  → Fetching notes ${start + 1}-${end}...`);
+  console.error(`  → Running ${batches.length} parallel JXA workers...`);
+  batches.forEach((b, i) => {
+    console.error(`    Worker ${i + 1}: notes ${b.start + 1}-${b.end}`);
+  });
+
+  // Fetch batch function
+  const fetchBatch = async (start: number, end: number, workerId: number): Promise<AppleNoteDetails[]> => {
+    const batchStart = performance.now();
 
     const result = await runJxa(`
       const app = Application('Notes');
@@ -207,18 +219,21 @@ export async function getAllNotesWithDetails(
     `);
 
     const batchDetails = JSON.parse(result as string) as AppleNoteDetails[];
-    allDetails.push(...batchDetails);
+    const elapsed = Math.round(performance.now() - batchStart);
+    console.error(`    ✅ Worker ${workerId}: fetched ${batchDetails.length} notes in ${elapsed}ms`);
+    return batchDetails;
+  };
 
-    const batchTime = Math.round(performance.now() - batchStart);
-    console.error(`    ✅ Fetched ${batchDetails.length} notes in ${batchTime}ms`);
+  // Execute all batches in parallel
+  const results = await Promise.all(
+    batches.map((batch, idx) => fetchBatch(batch.start, batch.end, idx + 1))
+  );
 
-    if (onProgress) {
-      onProgress(end, totalNotes);
-    }
-  }
+  // Combine results
+  const allDetails = results.flat();
 
   const totalElapsed = Math.round(performance.now() - startTime);
-  console.error(`  ✅ Fetched ${allDetails.length} notes total in ${totalElapsed}ms (${Math.round(totalElapsed / Math.max(allDetails.length, 1))}ms per note)`);
+  console.error(`  ✅ Fetched ${allDetails.length} notes in ${totalElapsed}ms (${Math.round(totalElapsed / Math.max(allDetails.length, 1))}ms per note)`);
 
   return allDetails;
 }
