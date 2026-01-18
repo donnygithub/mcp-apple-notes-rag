@@ -143,41 +143,84 @@ export async function getNoteDetailsById(noteId: string): Promise<AppleNoteDetai
 
 /**
  * Get all notes with full details (for initial indexing)
- * Returns notes in batches to handle large collections
+ * Uses bulk JXA fetch for performance - fetches all notes in batches
+ * Excludes notes in trash (Recently Deleted)
  */
 export async function getAllNotesWithDetails(
   onProgress?: (processed: number, total: number) => void
 ): Promise<AppleNoteDetails[]> {
-  // First get all summaries
-  const summaries = await getAllNotesSummary();
-  const total = summaries.length;
-  const results: AppleNoteDetails[] = [];
+  console.error("  → Fetching notes in bulk batches...");
+  const startTime = performance.now();
 
-  // Fetch full details in batches
-  const batchSize = 20;
-  for (let i = 0; i < summaries.length; i += batchSize) {
-    const batch = summaries.slice(i, i + batchSize);
+  // First get count
+  const countResult = await runJxa(`
+    const app = Application('Notes');
+    return app.notes().length;
+  `);
+  const totalNotes = countResult as number;
+  console.error(`  ℹ️  Total notes in Apple Notes: ${totalNotes}`);
 
-    const batchResults = await Promise.all(
-      batch.map(async (summary) => {
+  // Fetch in batches of 100 notes at a time
+  const batchSize = 100;
+  const allDetails: AppleNoteDetails[] = [];
+
+  for (let start = 0; start < totalNotes; start += batchSize) {
+    const end = Math.min(start + batchSize, totalNotes);
+    const batchStart = performance.now();
+
+    console.error(`  → Fetching notes ${start + 1}-${end}...`);
+
+    const result = await runJxa(`
+      const app = Application('Notes');
+      app.includeStandardAdditions = true;
+      const allNotes = app.notes();
+      const startIndex = ${start};
+      const endIndex = ${end};
+      const details = [];
+
+      for (let i = startIndex; i < endIndex; i++) {
         try {
-          const details = await getNoteDetailsById(summary.id);
-          return details;
-        } catch (error) {
-          console.error(`Error fetching note ${summary.title}:`, error);
-          return null;
-        }
-      })
-    );
+          const note = allNotes[i];
+          const props = note.properties();
+          const container = note.container();
+          const folderName = container ? container.name() : 'Notes';
 
-    results.push(...batchResults.filter((r): r is AppleNoteDetails => r !== null));
+          // Skip notes in trash
+          if (folderName === 'Recently Deleted') {
+            continue;
+          }
+
+          details.push({
+            id: props.id,
+            title: props.name,
+            content: note.body(),
+            folder: folderName,
+            creation_date: props.creationDate.toISOString(),
+            modification_date: props.modificationDate.toISOString()
+          });
+        } catch (error) {
+          // Skip notes that error
+        }
+      }
+
+      return JSON.stringify(details);
+    `);
+
+    const batchDetails = JSON.parse(result as string) as AppleNoteDetails[];
+    allDetails.push(...batchDetails);
+
+    const batchTime = Math.round(performance.now() - batchStart);
+    console.error(`    ✅ Fetched ${batchDetails.length} notes in ${batchTime}ms`);
 
     if (onProgress) {
-      onProgress(Math.min(i + batchSize, total), total);
+      onProgress(end, totalNotes);
     }
   }
 
-  return results;
+  const totalElapsed = Math.round(performance.now() - startTime);
+  console.error(`  ✅ Fetched ${allDetails.length} notes total in ${totalElapsed}ms (${Math.round(totalElapsed / Math.max(allDetails.length, 1))}ms per note)`);
+
+  return allDetails;
 }
 
 /**
