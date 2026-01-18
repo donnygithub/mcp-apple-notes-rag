@@ -140,6 +140,22 @@ export async function getAllNoteHashes(): Promise<Map<string, string>> {
   return map;
 }
 
+export async function getAllNoteMetadata(): Promise<Map<string, { hash: string; modificationDate: Date }>> {
+  const result = await pool.query(
+    "SELECT apple_note_id, content_hash, modification_date FROM notes WHERE apple_note_id IS NOT NULL"
+  );
+  const map = new Map<string, { hash: string; modificationDate: Date }>();
+  for (const row of result.rows) {
+    if (row.content_hash && row.modification_date) {
+      map.set(row.apple_note_id, {
+        hash: row.content_hash,
+        modificationDate: new Date(row.modification_date),
+      });
+    }
+  }
+  return map;
+}
+
 export async function deleteNotesByAppleIds(appleNoteIds: string[]): Promise<number> {
   if (appleNoteIds.length === 0) return 0;
   const result = await pool.query(
