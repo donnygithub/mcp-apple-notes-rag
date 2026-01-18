@@ -1,32 +1,32 @@
 {
   "name": "apple-notes-mcp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "",
   "type": "module",
   "main": "index.ts",
-  "description": "",
-  "keywords": [],
+  "description": "MCP server for semantic search over Apple Notes using PostgreSQL + pgvector",
+  "keywords": ["mcp", "apple-notes", "semantic-search", "pgvector"],
   "license": "ISC",
   "scripts": {
     "build": "bun build index.ts --outdir dist --target node",
     "start": "bun index.ts",
-    "purge-db": "rm -rf ~/.mcp-apple-notes",
+    "setup-db": "psql -f src/schema.sql",
     "test": "npx tsx index.test.ts"
   },
   "exports": {
     ".": "./index.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.0.8",
     "@huggingface/transformers": "^3.1.2",
-    "@lancedb/lancedb": "^0.14.0",
-    "@langchain/textsplitters": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.0.3",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
     "run-jxa": "^3.0.0",
     "turndown": "^7.2.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.10.9",
     "@types/turndown": "^5.0.5"
   }
 }

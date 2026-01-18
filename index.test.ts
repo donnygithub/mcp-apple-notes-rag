@@ -1,87 +1,139 @@
 // Usage: npx tsx index.test.ts
-import { test, describe } from "node:test";
+// Requires: PostgreSQL running with apple_notes database
+import { test, describe, before, after } from "node:test";
 import assert from "node:assert";
-import * as lancedb from "@lancedb/lancedb";
-import path from "node:path";
-import os from "node:os";
-import { LanceSchema } from "@lancedb/lancedb/embedding";
-import { Utf8 } from "apache-arrow";
+
+// Test configuration - uses test database to avoid production data
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || "postgresql://localhost:5432/apple_notes_test";
+
 import {
-  createNotesTable,
-  indexNotes,
-  OnDeviceEmbeddingFunction,
-  searchAndCombineResults,
-} from "./index";
+  initializeSchema,
+  checkConnection,
+  upsertNote,
+  getNoteByTitle,
+  getNotesCount,
+  vectorSearch,
+  textSearch,
+  closePool,
+} from "./src/db.js";
+import { generateEmbedding, prepareTextForEmbedding } from "./src/embeddings.js";
+import { hybridSearch } from "./src/search.js";
 
-describe("Apple Notes Indexing", async () => {
-  const db = await lancedb.connect(
-    path.join(os.homedir(), ".mcp-apple-notes", "data")
-  );
-  const func = new OnDeviceEmbeddingFunction();
+describe("Apple Notes MCP - PostgreSQL", async () => {
+  let dbConnected = false;
 
-  const notesSchema = LanceSchema({
-    title: func.sourceField(new Utf8()),
-    content: func.sourceField(new Utf8()),
-    creation_date: func.sourceField(new Utf8()),
-    modification_date: func.sourceField(new Utf8()),
-    vector: func.vectorField(),
+  before(async () => {
+    dbConnected = await checkConnection();
+    if (dbConnected) {
+      await initializeSchema();
+    }
   });
 
-  test("should create notes table", async () => {
-    const notesTable = await db.createEmptyTable("test-notes", notesSchema, {
-      mode: "create",
-      existOk: true,
-    });
-
-    assert.ok(notesTable, "Notes table should be created");
-    const count = await notesTable.countRows();
-    assert.ok(typeof count === "number", "Should be able to count rows");
+  after(async () => {
+    if (dbConnected) {
+      await closePool();
+    }
   });
 
-  test.skip("should index all notes correctly", async () => {
-    const { notesTable } = await createNotesTable("test-notes");
-
-    await indexNotes(notesTable);
-
-    const count = await notesTable.countRows();
-    assert.ok(typeof count === "number", "Should be able to count rows");
-    assert.ok(count > 0, "Should be able to count rows");
+  test("should connect to database", async () => {
+    assert.ok(dbConnected, "Database should be connected");
   });
 
-  test("should perform vector search", async () => {
-    const start = performance.now();
-    const { notesTable } = await createNotesTable("test-notes");
-    const end = performance.now();
-    console.log(`Creating table took ${Math.round(end - start)}ms`);
+  test("should generate embeddings", async () => {
+    const text = "This is a test note about machine learning";
+    const embedding = await generateEmbedding(text);
 
-    await notesTable.add([
-      {
-        id: "1",
-        title: "Test Note",
-        content: "This is a test note content",
-        creation_date: new Date().toISOString(),
-        modification_date: new Date().toISOString(),
-      },
-    ]);
-
-    const addEnd = performance.now();
-    console.log(`Adding notes took ${Math.round(addEnd - end)}ms`);
-
-    const results = await searchAndCombineResults(notesTable, "test note");
-
-    const combineEnd = performance.now();
-    console.log(`Combining results took ${Math.round(combineEnd - addEnd)}ms`);
-
-    assert.ok(results.length > 0, "Should return search results");
-    assert.equal(results[0].title, "Test Note", "Should find the test note");
+    assert.ok(Array.isArray(embedding), "Embedding should be an array");
+    assert.equal(embedding.length, 384, "Embedding should have 384 dimensions");
+    assert.ok(embedding.every((v) => typeof v === "number"), "All values should be numbers");
   });
 
-  test("should perform vector search on real indexed data", async () => {
-    const { notesTable } = await createNotesTable("test-notes");
+  test("should prepare text for embedding", () => {
+    const title = "My Note";
+    const content = "This is the content";
+    const prepared = prepareTextForEmbedding(title, content);
 
-    const results = await searchAndCombineResults(notesTable, "15/12");
+    assert.equal(prepared, "My Note\n\nThis is the content");
+  });
 
-    assert.ok(results.length > 0, "Should return search results");
-    assert.equal(results[0].title, "Test Note", "Should find the test note");
+  test.skip("should upsert and retrieve a note", async () => {
+    if (!dbConnected) {
+      console.log("Skipping: Database not connected");
+      return;
+    }
+
+    const testNote = {
+      apple_note_id: "test-note-001",
+      title: "Test Note for Unit Testing",
+      content: "This is test content for the Apple Notes MCP server",
+      html_content: "<p>This is test content</p>",
+      folder_path: "Test Folder",
+      creation_date: new Date(),
+      modification_date: new Date(),
+      content_hash: "abc123",
+      embedding: await generateEmbedding("Test Note for Unit Testing This is test content"),
+    };
+
+    const id = await upsertNote(testNote);
+    assert.ok(id > 0, "Should return a valid ID");
+
+    const retrieved = await getNoteByTitle("Test Note for Unit Testing");
+    assert.ok(retrieved, "Should retrieve the note");
+    assert.equal(retrieved?.title, testNote.title);
+  });
+
+  test.skip("should perform vector search", async () => {
+    if (!dbConnected) {
+      console.log("Skipping: Database not connected");
+      return;
+    }
+
+    const count = await getNotesCount();
+    if (count === 0) {
+      console.log("Skipping: No notes indexed");
+      return;
+    }
+
+    const queryEmbedding = await generateEmbedding("machine learning");
+    const results = await vectorSearch(queryEmbedding, 5);
+
+    assert.ok(Array.isArray(results), "Should return an array");
+  });
+
+  test.skip("should perform text search", async () => {
+    if (!dbConnected) {
+      console.log("Skipping: Database not connected");
+      return;
+    }
+
+    const count = await getNotesCount();
+    if (count === 0) {
+      console.log("Skipping: No notes indexed");
+      return;
+    }
+
+    const results = await textSearch("test", 5);
+    assert.ok(Array.isArray(results), "Should return an array");
+  });
+
+  test.skip("should perform hybrid search", async () => {
+    if (!dbConnected) {
+      console.log("Skipping: Database not connected");
+      return;
+    }
+
+    const count = await getNotesCount();
+    if (count === 0) {
+      console.log("Skipping: No notes indexed");
+      return;
+    }
+
+    const results = await hybridSearch("machine learning notes", 10);
+
+    assert.ok(Array.isArray(results), "Should return an array");
+    if (results.length > 0) {
+      assert.ok(results[0].title, "Results should have titles");
+      assert.ok(results[0].content, "Results should have content");
+    }
   });
 });

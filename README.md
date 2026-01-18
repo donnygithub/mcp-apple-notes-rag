@@ -9,16 +9,20 @@ A [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-pr
 ## Features
 
 - 🔍 Semantic search over Apple Notes using [`all-MiniLM-L6-v2`](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) on-device embeddings model
-- 📝 Full-text search capabilities
-- 📊 Vector storage using [LanceDB](https://lancedb.github.io/lancedb/)
+- 📝 Full-text search with trigram matching
+- 📊 Vector storage using [PostgreSQL + pgvector](https://github.com/pgvector/pgvector)
 - 🤖 MCP-compatible server for AI assistant integration
 - 🍎 Native Apple Notes integration via JXA
 - 🏃‍♂️ Fully local execution - no API keys needed
+- ⚡ Batch indexing with progress tracking
+- 🔄 Incremental sync - only re-index changed notes
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/docs/installation)
+- [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension
 - [Claude Desktop](https://claude.ai/download)
+- macOS (required for Apple Notes access)
 
 ## Installation
 
@@ -35,6 +39,31 @@ cd mcp-apple-notes
 bun install
 ```
 
+3. Set up PostgreSQL database:
+
+```bash
+# Install PostgreSQL with pgvector (macOS)
+brew install postgresql@16
+brew install pgvector
+
+# Start PostgreSQL
+brew services start postgresql@16
+
+# Create database and enable extensions
+createdb apple_notes
+psql apple_notes -c "CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;"
+
+# Initialize schema
+bun run setup-db
+```
+
+4. Configure environment:
+
+```bash
+cp .env.example .env
+# Edit .env if your PostgreSQL connection differs from defaults
+```
+
 ## Usage
 
 1. Open Claude desktop app and go to Settings -> Developer -> Edit Config
@@ -46,9 +75,12 @@ bun install
 ```json
 {
   "mcpServers": {
-    "local-machine": {
+    "apple-notes": {
       "command": "/Users/<YOUR_USER_NAME>/.bun/bin/bun",
-      "args": ["/Users/<YOUR_USER_NAME>/apple-notes-mcp/index.ts"]
+      "args": ["/Users/<YOUR_USER_NAME>/mcp-apple-notes/index.ts"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/apple_notes"
+      }
     }
   }
 }
@@ -62,9 +94,21 @@ Important: Replace `<YOUR_USER_NAME>` with your actual username.
 
 4. Start by indexing your notes. Ask Claude to index your notes by saying something like: "Index my notes" or "Index my Apple Notes".
 
+## MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `list-notes` | Lists count of indexed notes |
+| `index-notes` | Full indexing with batch processing |
+| `sync-notes` | Incremental sync - only changed notes |
+| `get-indexing-status` | Check indexing progress |
+| `get-note` | Get full note content by title |
+| `search-notes` | Hybrid semantic + full-text search |
+| `create-note` | Create new Apple Note |
+
 ## Troubleshooting
 
-To see logs:
+### View Logs
 
 ```bash
 tail -n 50 -f ~/Library/Logs/Claude/mcp-server-local-machine.log
@@ -72,10 +116,51 @@ tail -n 50 -f ~/Library/Logs/Claude/mcp-server-local-machine.log
 tail -n 50 -f ~/Library/Logs/Claude/mcp.log
 ```
 
-## Todos
+### Database Issues
 
-- [ ] Apple notes are returned in the HTML format. We should turn them to Markdown and embed that
-- [ ] Chunk source content using recursive text splitter or markdown text splitter
-- [ ] Add an option to use custom embeddings model
-- [ ] More control over DB - purge, custom queries, etc.
-- [x] Storing notes in Notes via Claude
+```bash
+# Check PostgreSQL is running
+pg_isready
+
+# Check extensions are installed
+psql apple_notes -c "SELECT * FROM pg_extension WHERE extname IN ('vector', 'pg_trgm');"
+
+# Re-initialize schema
+bun run setup-db
+```
+
+### Indexing Issues
+
+- For large note collections, use `sync-notes` for incremental updates
+- Check job status with `get-indexing-status` tool
+- If indexing fails, check the database connection
+
+## Architecture
+
+```
+├── index.ts              # MCP server entry point
+├── src/
+│   ├── db.ts            # PostgreSQL connection pool
+│   ├── schema.sql       # Database schema
+│   ├── embeddings.ts    # On-device embeddings
+│   ├── apple-notes.ts   # JXA integration
+│   ├── indexer.ts       # Batch indexing
+│   └── search.ts        # Hybrid search
+```
+
+## Development
+
+```bash
+# Run server
+bun start
+
+# Run tests
+bun test
+
+# Build for distribution
+bun run build
+```
+
+## License
+
+ISC
