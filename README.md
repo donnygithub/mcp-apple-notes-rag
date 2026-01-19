@@ -1,4 +1,4 @@
-# MCP Apple Notes
+# MCP Apple Notes RAG
 
 ![MCP Apple Notes](./images/logo.png)
 
@@ -30,8 +30,8 @@ A [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-pr
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/donnygithub/mcp-apple-notes
-cd mcp-apple-notes
+git clone https://github.com/donnygithub/mcp-apple-notes-rag
+cd mcp-apple-notes-rag
 ```
 
 2. Install dependencies:
