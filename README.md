@@ -20,7 +20,7 @@ A [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-pr
 ## Prerequisites
 
 - [Bun](https://bun.sh/docs/installation)
-- [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension
+- [PostgreSQL 17+](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) and pg_trgm extensions
 - [Claude Desktop](https://claude.ai/download)
 - macOS (required for Apple Notes access)
 
@@ -29,7 +29,7 @@ A [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-pr
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/RafalWilinski/mcp-apple-notes
+git clone https://github.com/donnygithub/mcp-apple-notes
 cd mcp-apple-notes
 ```
 
@@ -43,11 +43,12 @@ bun install
 
 ```bash
 # Install PostgreSQL with pgvector (macOS)
-brew install postgresql@16
+# Requires PostgreSQL 17+ for best pgvector compatibility
+brew install postgresql@17
 brew install pgvector
 
 # Start PostgreSQL
-brew services start postgresql@16
+brew services start postgresql@17
 
 # Create database and enable extensions
 createdb apple_notes
@@ -56,6 +57,8 @@ psql apple_notes -c "CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;"
 # Initialize schema
 bun run setup-db
 ```
+
+**Note:** If using a non-standard port (e.g., PostgreSQL 18 on port 5434), update your `.env` file accordingly.
 
 4. Configure environment:
 
