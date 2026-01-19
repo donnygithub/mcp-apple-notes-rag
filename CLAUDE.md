@@ -209,14 +209,18 @@ Tests use a separate test database (`apple_notes_test`). Key test scenarios:
 - Vector and text search
 - Hybrid search with RRF
 
-## Claude Desktop Configuration
+## MCP Configuration
+
+### Claude Code CLI
+
+Add to your `~/.claude/claude.json`:
 
 ```json
 {
   "mcpServers": {
-    "apple-notes": {
+    "apple-notes-rag": {
       "command": "/Users/<USERNAME>/.bun/bin/bun",
-      "args": ["/Users/<USERNAME>/mcp/mcp-apple-notes/index.ts"],
+      "args": ["/Users/<USERNAME>/mcp/mcp-apple-notes-rag/index.ts"],
       "env": {
         "DATABASE_URL": "postgresql://localhost:5432/apple_notes"
       }
@@ -225,4 +229,22 @@ Tests use a separate test database (`apple_notes_test`). Key test scenarios:
 }
 ```
 
-Replace `<USERNAME>` with your actual username and restart Claude Desktop after configuration.
+### VS Code (Roo Code)
+
+Add to your MCP settings at `~/Library/Application Support/Code/User/globalStorage/ai-for-devs-community.apple-roo-code/settings/mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "apple-notes-rag": {
+      "command": "/Users/<USERNAME>/.bun/bin/bun",
+      "args": ["/Users/<USERNAME>/mcp/mcp-apple-notes-rag/index.ts"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/apple_notes"
+      }
+    }
+  }
+}
+```
+
+Replace `<USERNAME>` with your actual username and restart your IDE after configuration.

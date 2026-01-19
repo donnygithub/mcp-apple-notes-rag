@@ -21,7 +21,7 @@ A [Model Context Protocol (MCP)](https://www.anthropic.com/news/model-context-pr
 
 - [Bun](https://bun.sh/docs/installation)
 - [PostgreSQL 17+](https://www.postgresql.org/download/) with [pgvector](https://github.com/pgvector/pgvector) and pg_trgm extensions
-- [Claude Desktop](https://claude.ai/download)
+- [Claude Code CLI](https://docs.anthropic.com/claude-code) or [VS Code with Roo Code extension](https://marketplace.visualstudio.com/items?itemName=ai-for-devs-community.apple-roo-code)
 - macOS (required for Apple Notes access)
 - Optional: [pgAdmin](https://www.pgadmin.org) - GUI for database management
 
@@ -70,20 +70,36 @@ cp .env.example .env
 # Edit .env if your PostgreSQL connection differs from defaults
 ```
 
-## Usage
+## Configuration
 
-1. Open Claude desktop app and go to Settings -> Developer -> Edit Config
+### For Claude Code CLI
 
-![Claude Desktop Settings](./images/desktop_settings.png)
-
-2. Open the `claude_desktop_config.json` and add the following entry:
+Add to your `~/.claude/claude.json`:
 
 ```json
 {
   "mcpServers": {
-    "apple-notes": {
+    "apple-notes-rag": {
       "command": "/Users/<YOUR_USER_NAME>/.bun/bin/bun",
-      "args": ["/Users/<YOUR_USER_NAME>/mcp-apple-notes/index.ts"],
+      "args": ["/Users/<YOUR_USER_NAME>/mcp/mcp-apple-notes-rag/index.ts"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/apple_notes"
+      }
+    }
+  }
+}
+```
+
+### For VS Code (Roo Code)
+
+Add to your MCP settings at `~/Library/Application Support/Code/User/globalStorage/ai-for-devs-community.apple-roo-code/settings/mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "apple-notes-rag": {
+      "command": "/Users/<YOUR_USER_NAME>/.bun/bin/bun",
+      "args": ["/Users/<YOUR_USER_NAME>/mcp/mcp-apple-notes-rag/index.ts"],
       "env": {
         "DATABASE_URL": "postgresql://localhost:5432/apple_notes"
       }
@@ -94,13 +110,14 @@ cp .env.example .env
 
 **Important:**
 - Replace `<YOUR_USER_NAME>` with your actual username
+- Update the path to match where you cloned this repository
 - If using a non-standard PostgreSQL port (e.g., 5434), update the port in `DATABASE_URL` to match your setup
 
-3. Restart Claude desktop app. You should see this:
+After configuration, restart Claude Code CLI or reload VS Code to activate the MCP server.
 
-![Claude MCP Connection Status](./images/verify_installation.png)
+## Getting Started
 
-4. Start by indexing your notes. Ask Claude to index your notes by saying something like: "Index my notes" or "Index my Apple Notes".
+Start by indexing your notes. Ask Claude to index your notes by saying something like: "Index my notes" or "Index my Apple Notes".
 
 ## CLI Scripts
 
